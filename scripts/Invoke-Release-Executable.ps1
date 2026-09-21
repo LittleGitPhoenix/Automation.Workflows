@@ -111,7 +111,6 @@ New-Item -ItemType Directory -Force -Path $LocalReleaseDir | Out-Null
 # Accumulate per-project data for a single updater-index write at the end (only if configured).
 $updaterProjects = [ordered] @{}
 $summaryRows     = [System.Collections.Generic.List[string]]::new()
-$stagedRidTags   = [System.Collections.Generic.List[string]]::new()
 
 $projects = @($executableTarget.projects | ForEach-Object { Get-Item (Join-Path $WorkspaceRoot $_) })
 
@@ -198,7 +197,6 @@ foreach ($proj in $projects) {
                     Write-Host "│   ❌ git tag '$ridTag' failed (exit code $LASTEXITCODE)." -ForegroundColor Red
                     exit 1
                 }
-                $stagedRidTags.Add($ridTag)
                 $newRidTags.Add($ridTag)
                 Write-Host "│   📌 Staged tag: $ridTag" -ForegroundColor DarkGray
             }
@@ -295,13 +293,6 @@ if ($summaryRows.Count -eq 0) {
 }
 
 if ($isGitHub) {
-    if ($stagedRidTags.Count -gt 0) {
-        & git push origin --tags
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host '❌ git push --tags failed.' -ForegroundColor Red
-            exit 1
-        }
-    }
     if ($executableTarget.updaterReleaseName -and $updaterProjects.Count -gt 0) {
         Update-UpdaterRelease -Projects $updaterProjects -Repo $repo -UpdaterTag $executableTarget.updaterReleaseName
     }

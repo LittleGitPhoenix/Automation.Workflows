@@ -26,7 +26,8 @@ function Invoke-ScriptUnderTest {
     $testDriveRoot = (Get-PSDrive -Name TestDrive -ErrorAction SilentlyContinue).Root
     function Resolve-TestDrivePath([string] $Value) {
         if ($testDriveRoot -and $Value -match '^TestDrive:[\\/]?') {
-            return $Value -replace '^TestDrive:[\\/]?', ($testDriveRoot.TrimEnd('\', '/') + '\')
+            $separator = [System.IO.Path]::DirectorySeparatorChar
+            return $Value -replace '^TestDrive:[\\/]?', ($testDriveRoot.TrimEnd('\', '/') + $separator)
         }
         return $Value
     }
