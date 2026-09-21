@@ -29,7 +29,9 @@
     In both modes, a project is skipped (CI only) once its GitHub release exists with all expected
     RID assets attached; if the release exists but is missing assets (e.g. a prior run's
     `gh release create` failed partway through uploads), the run resumes by uploading just the
-    missing ones instead of creating the release again.
+    missing ones instead of creating the release again. Even when a project's release is already
+    complete and nothing is published for it, its updater entry is still recomputed so a rerun can
+    repair a previously failed/missed updater index update independently of new releases.
     Requires the consuming repo's own common.targets to define SetupPropertiesAfterPublish +
     CreateArchive (this is app build-system logic, not something this script provides), plus a
     Properties/PublishProfiles/*.pubxml per RID. Profiles with "local only" in the name are skipped.
@@ -67,6 +69,10 @@ function Update-UpdaterRelease {
             --title    $UpdaterTag `
             --notes    'Index release used by the auto-updater. Do not delete or modify manually.' `
             --prerelease
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Failed to create '$UpdaterTag' index release." -ForegroundColor Red
+            exit 1
+        }
     } else {
         & gh release download $UpdaterTag --pattern 'updater.json' --dir $tempDir --clobber
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path $jsonPath)) {
@@ -153,6 +159,21 @@ foreach ($proj in $projects) {
             $missingFiles   = @($expectedFiles.Values | Where-Object { $_ -notin $existingAssets })
             if ($missingFiles.Count -eq 0) {
                 Write-Host "⏭️  $primaryTag — release already complete, skipping." -ForegroundColor DarkGray
+                # Recompute the updater entry even though nothing is published here, so a rerun can
+                # still repair a previously failed/missed Update-UpdaterRelease call for this project.
+                if ($executableTarget.updaterReleaseName) {
+                    $changelog = (& "$PSScriptRoot/Get-ChangelogEntry.ps1" -ProjectPath $projPath) -join "`n"
+                    $assetUrls = [ordered] @{}
+                    foreach ($rid in $expectedFiles.Keys) {
+                        $assetUrls[$rid] = "https://github.com/$repo/releases/download/$primaryTag/$($expectedFiles[$rid])"
+                    }
+                    $updaterProjects[$assemblyName] = [ordered] @{
+                        version   = $version
+                        release   = $primaryTag
+                        changelog = $changelog
+                        assets    = $assetUrls
+                    }
+                }
                 continue
             }
             Write-Host "↻  $primaryTag — release exists but is missing $($missingFiles.Count) asset(s), resuming." -ForegroundColor Yellow
@@ -284,14 +305,9 @@ foreach ($proj in $projects) {
 }
 
 # ── Post-loop: finalize ───────────────────────────────────────────────────────
-if ($summaryRows.Count -eq 0) {
-    Write-Host "`nNo new project versions — nothing to release." -ForegroundColor DarkGray
-    if ($SummaryFile) {
-        Add-Content -Path $SummaryFile -Value "### Releases`n`n_No new releases were created._`n" -Encoding UTF8
-    }
-    exit 0
-}
-
+# Runs even when no new release was created this run, so a previously failed/missed updater
+# sync (e.g. all releases already complete but Update-UpdaterRelease itself failed last time)
+# can still be repaired independently of whether anything new was released.
 if ($isGitHub) {
     if ($executableTarget.updaterReleaseName -and $updaterProjects.Count -gt 0) {
         Update-UpdaterRelease -Projects $updaterProjects -Repo $repo -UpdaterTag $executableTarget.updaterReleaseName
@@ -311,6 +327,14 @@ if ($isGitHub) {
         } | ConvertTo-Json -Depth 10 | Set-Content -Path $localJsonPath -Encoding UTF8
     }
     Write-Host "`n✅ Local updater.json: $localJsonPath" -ForegroundColor Green
+}
+
+if ($summaryRows.Count -eq 0) {
+    Write-Host "`nNo new project versions — nothing to release." -ForegroundColor DarkGray
+    if ($SummaryFile) {
+        Add-Content -Path $SummaryFile -Value "### Releases`n`n_No new releases were created._`n" -Encoding UTF8
+    }
+    exit 0
 }
 
 if ($SummaryFile) {
