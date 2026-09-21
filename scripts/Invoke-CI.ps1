@@ -26,7 +26,7 @@ param(
     [string] $ConfigPath,
     [ValidateSet('Validate', 'Release', 'All')]
     [string] $Mode,
-    [switch] $CreateTags        # Pre-answer the "create git tags?" prompt with Yes.
+    [switch] $ShowTags = $true  # Print which git tags would be created during a local release. Pass -ShowTags:$false to suppress.
 )
 
 $ErrorActionPreference = 'Stop'
@@ -49,11 +49,6 @@ if (-not $Mode) {
     }
 }
 
-if ($Mode -in @('Release', 'All') -and -not $CreateTags) {
-    $answer     = Read-Host 'Create local git tags? [y/N]'
-    $CreateTags = $answer -match '^[Yy]$'
-}
-
 # ── Output directory & summary file ───────────────────────────────────────────
 $timestamp       = Get-Date -Format 'yyyyMMdd-HHmmss'
 $localReleaseDir = Join-Path $WorkspaceRoot ".publish/local-release/$timestamp"
@@ -64,8 +59,29 @@ function Invoke-Script {
     param([string] $Name, [hashtable] $Extra = @{})
     $path   = Join-Path $PSScriptRoot $Name
     $params = @{ WorkspaceRoot = $WorkspaceRoot; ConfigPath = $ConfigPath } + $Extra
-    $global:LASTEXITCODE = 0
-    & $path @params
+
+    # Runs in a separate pwsh process, since every chained script ends with exit 0/exit 1 and
+    # invoking it with `&` in this same process would let that exit terminate this whole runner.
+    # Built as a -Command string (not -File) so $ErrorView can be forced to NormalView first;
+    # pwsh's default ConciseView on an uncaught terminating error would otherwise hide the actual
+    # Write-Error message. Parameter names must stay unquoted so PowerShell still recognizes them
+    # as switches; only values are quoted.
+    $commandParts = [System.Collections.Generic.List[string]]::new()
+    foreach ($key in $params.Keys) {
+        $value = $params[$key]
+        if ($value -is [switch] -or $value -is [bool]) {
+            # Explicit :$true/:$false so a child script's own switch default can't override an opt-out.
+            $commandParts.Add("-$key`:`$$([bool] $value)")
+        } elseif ($null -ne $value -and $value -ne '') {
+            $commandParts.Add("-$key")
+            $commandParts.Add("'" + ([string] $value -replace "'", "''") + "'")
+        }
+    }
+
+    $quotedPath  = "'" + ($path -replace "'", "''") + "'"
+    $commandText = "`$ErrorView = 'NormalView'; & $quotedPath $($commandParts -join ' ')"
+
+    & pwsh -NoProfile -NonInteractive -Command $commandText
     if ($LASTEXITCODE -ne 0) {
         Write-Host "`n❌ '$Name' exited with code $LASTEXITCODE." -ForegroundColor Red
         exit $LASTEXITCODE
@@ -105,16 +121,17 @@ if ($Mode -in @('Release', 'All')) {
 
         switch ($target.type) {
             'library' {
+                $releaseExtra['ShowTags'] = $ShowTags
                 Write-Host "`n[Release] Creating local library release bundle..." -ForegroundColor Cyan
                 Invoke-Script 'Invoke-Release-Library.ps1' $releaseExtra
                 Write-Host '[GITHUB-ONLY] GitHub releases + NuGet.org push would happen via gh + dotnet nuget push.' -ForegroundColor DarkGray
             }
             'executable' {
-                if ($CreateTags) { $releaseExtra['CreateTags'] = $true }
+                $releaseExtra['ShowTags'] = $ShowTags
                 Write-Host "`n[Release] Creating local executable release bundle..." -ForegroundColor Cyan
                 Invoke-Script 'Invoke-Release-Executable.ps1' $releaseExtra
                 Write-Host '[GITHUB-ONLY] GitHub releases would be created via gh release create.' -ForegroundColor DarkGray
-                if (-not $CreateTags) {
+                if (-not $ShowTags) {
                     Write-Host '[GITHUB-ONLY] Git tags would be pushed to origin.' -ForegroundColor DarkGray
                 }
             }

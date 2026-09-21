@@ -14,16 +14,22 @@
     Publishes self-contained executables and creates releases.
 .DESCRIPTION
     In a GitHub Actions environment (GITHUB_ACTIONS = 'true'):
-      - Creates a versioned GitHub release per project with all RID archives as assets.
-      - Creates RID-specific git tags (AssemblyName.Version.RID) and pushes them.
+      - Creates RID-specific git tags (AssemblyName.Version.RID) and pushes them first, since tag
+        creation is idempotent and retryable, unlike the release step below.
+      - Creates a versioned GitHub release per project with all RID archives as assets; this also
+        creates and pushes the primary "AssemblyName.Version" git tag remotely.
       - Optionally updates an auto-updater index release (updater.json) if the "executable"
         releaseTargets entry in ci-config.json declares an "updaterReleaseName".
     Locally (GITHUB_ACTIONS not set):
       - Publishes projects and creates per-project .zip-equivalent bundles under
         -LocalReleaseDir (defaults to .publish/local-release/).
       - Writes a local updater.json mirror only if "updaterReleaseName" is configured.
-      - Optionally creates local git tags (-CreateTags).
-    In both modes, a project is skipped when its primary tag already exists (CI only).
+      - Prints which git tags would be created (-ShowTags, default on), without touching git. Pass
+        -ShowTags:$false to suppress.
+    In both modes, a project is skipped (CI only) once its GitHub release exists with all expected
+    RID assets attached; if the release exists but is missing assets (e.g. a prior run's
+    `gh release create` failed partway through uploads), the run resumes by uploading just the
+    missing ones instead of creating the release again.
     Requires the consuming repo's own common.targets to define SetupPropertiesAfterPublish +
     CreateArchive (this is app build-system logic, not something this script provides), plus a
     Properties/PublishProfiles/*.pubxml per RID. Profiles with "local only" in the name are skipped.
@@ -35,7 +41,7 @@ param(
     [string] $ConfigPath,
     [string] $SummaryFile,
     [string] $LocalReleaseDir,
-    [switch] $CreateTags        # Local mode only: create git tags without pushing.
+    [switch] $ShowTags = $true  # Local mode only: print which git tags would be created. Pass -ShowTags:$false to suppress.
 )
 
 $ErrorActionPreference = 'Stop'
@@ -118,25 +124,43 @@ foreach ($proj in $projects) {
     $version    = (& "$PSScriptRoot/Get-ProjectVersion.ps1" -ProjectPath $projPath).Version
     $primaryTag = "$assemblyName.$version"
 
-    if ($isGitHub) {
-        $tagCheck = & git tag -l $primaryTag
-        if ($tagCheck) {
-            Write-Host "⏭️  $primaryTag — already tagged, skipping." -ForegroundColor DarkGray
-            continue
-        }
-    }
-
-    & "$PSScriptRoot/Write-Section.ps1" -Title "Releasing $primaryTag"
-
     $profilesDirName = if ($executableTarget.publishProfilesDir) { $executableTarget.publishProfilesDir } else { 'Properties/PublishProfiles' }
     $profilesDir     = Join-Path $projDir $profilesDirName
     $profiles        = Get-ChildItem -Path $profilesDir -Filter '*.pubxml' |
         Where-Object { $_.BaseName -notlike '*local only*' }
 
     if ($profiles.Count -eq 0) {
-        Write-Host '│   No eligible publish profiles — skipping.' -ForegroundColor Yellow
+        Write-Host "⏭️  $primaryTag — no eligible publish profiles, skipping." -ForegroundColor Yellow
         continue
     }
+
+    # A previously-pushed tag doesn't mean the release is complete: `gh release create` can leave
+    # the tag and a partial release behind if it fails partway through asset uploads. Checking the
+    # release's actual assets (not just tag existence) lets a retry finish an incomplete release
+    # instead of skipping the project forever.
+    $releaseExists  = $false
+    $existingAssets = @()
+    if ($isGitHub) {
+        $expectedFiles = [ordered] @{}
+        foreach ($pubProfile in $profiles) {
+            $rid = & "$PSScriptRoot/Get-ProjectProperty.ps1" -ProjectPath $projPath -Property RuntimeIdentifier -PublishProfile $pubProfile.BaseName
+            $expectedFiles[$rid] = "$assemblyName.$version.$rid.tgz"
+        }
+
+        $assetsJson    = & gh release view $primaryTag --json assets --jq '.assets[].name' 2>$null
+        $releaseExists = $LASTEXITCODE -eq 0
+        if ($releaseExists) {
+            $existingAssets = @($assetsJson)
+            $missingFiles   = @($expectedFiles.Values | Where-Object { $_ -notin $existingAssets })
+            if ($missingFiles.Count -eq 0) {
+                Write-Host "⏭️  $primaryTag — release already complete, skipping." -ForegroundColor DarkGray
+                continue
+            }
+            Write-Host "↻  $primaryTag — release exists but is missing $($missingFiles.Count) asset(s), resuming." -ForegroundColor Yellow
+        }
+    }
+
+    & "$PSScriptRoot/Write-Section.ps1" -Title "Releasing $primaryTag"
 
     $archives = [ordered] @{}
     foreach ($pubProfile in $profiles) {
@@ -159,28 +183,54 @@ foreach ($proj in $projects) {
         $notesFile = Join-Path $env:RUNNER_TEMP "release-notes-$assemblyName.md"
         $changelog | Set-Content -Path $notesFile -Encoding UTF8
 
-        Write-Host "│   Creating GitHub release '$primaryTag'..." -ForegroundColor Cyan
-        & gh release create $primaryTag @($archives.Values) --title $primaryTag --notes-file $notesFile
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "│   ❌ gh release create failed for '$primaryTag'." -ForegroundColor Red
-            # A previous run may have been cancelled/interrupted after creating the release but before tagging/pushing.
-            Write-Host "│   If '$primaryTag' already exists on GitHub from an earlier interrupted run, delete it (and its tag, if orphaned) and re-run:" -ForegroundColor Yellow
-            Write-Host "│     gh release delete $primaryTag --yes" -ForegroundColor Yellow
-            Write-Host "│     git push origin :refs/tags/$primaryTag" -ForegroundColor Yellow
-            exit 1
-        }
-
-        $ridTagList = [System.Collections.Generic.List[string]]::new()
+        # Create and push the RID tags before creating the GitHub release, since `gh release create`
+        # itself creates and pushes the primary tag remotely. Doing tags first means a failure here
+        # is retried cleanly (tag creation is idempotent), whereas a failure after the release/primary
+        # tag already exists would make the retry skip the project without ever finishing it.
+        $ridTagList    = [System.Collections.Generic.List[string]]::new()
+        $newRidTags    = [System.Collections.Generic.List[string]]::new()
         foreach ($rid in $archives.Keys) {
             $ridTag = "$assemblyName.$version.$rid"
-            & git tag $ridTag
+            $existingRidTag = & git tag -l $ridTag
+            if (-not $existingRidTag) {
+                & git tag $ridTag
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "│   ❌ git tag '$ridTag' failed (exit code $LASTEXITCODE)." -ForegroundColor Red
+                    exit 1
+                }
+                $stagedRidTags.Add($ridTag)
+                $newRidTags.Add($ridTag)
+                Write-Host "│   📌 Staged tag: $ridTag" -ForegroundColor DarkGray
+            }
+            $ridTagList.Add("``$ridTag``")
+        }
+
+        if ($newRidTags.Count -gt 0) {
+            & git push origin @($newRidTags)
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "│   ❌ git tag '$ridTag' failed (exit code $LASTEXITCODE)." -ForegroundColor Red
+                Write-Host '│   ❌ git push of RID tags failed.' -ForegroundColor Red
                 exit 1
             }
-            $stagedRidTags.Add($ridTag)
-            Write-Host "│   📌 Staged tag: $ridTag" -ForegroundColor DarkGray
-            $ridTagList.Add("``$ridTag``")
+        }
+
+        if (-not $releaseExists) {
+            Write-Host "│   Creating GitHub release '$primaryTag'..." -ForegroundColor Cyan
+            & gh release create $primaryTag @($archives.Values) --title $primaryTag --notes-file $notesFile
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "│   ❌ gh release create failed for '$primaryTag'." -ForegroundColor Red
+                Write-Host "│   RID tags are already pushed, so the next run will pick up cleanly at the release step." -ForegroundColor Yellow
+                exit 1
+            }
+        } else {
+            $uploadPaths = @($archives.GetEnumerator() |
+                Where-Object { [System.IO.Path]::GetFileName($_.Value) -notin $existingAssets } |
+                ForEach-Object { $_.Value })
+            Write-Host "│   Uploading $($uploadPaths.Count) missing asset(s) to existing release '$primaryTag'..." -ForegroundColor Cyan
+            & gh release upload $primaryTag @uploadPaths
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "│   ❌ gh release upload failed for '$primaryTag'." -ForegroundColor Red
+                exit 1
+            }
         }
 
         $releaseUrl  = "https://github.com/$repo/releases/tag/$primaryTag"
@@ -226,21 +276,10 @@ foreach ($proj in $projects) {
             }
         }
 
-        if ($CreateTags) {
-            $existing = & git -C $WorkspaceRoot tag -l $primaryTag
-            if (-not $existing) {
-                & git -C $WorkspaceRoot tag $primaryTag
-                Write-Host "  📌 Tag: $primaryTag" -ForegroundColor Yellow
-            } else {
-                Write-Host "  ⚠️  Tag '$primaryTag' already exists, skipping." -ForegroundColor Yellow
-            }
+        if ($ShowTags) {
+            Write-Host "  📌 Would tag: $primaryTag" -ForegroundColor Yellow
             foreach ($rid in $archives.Keys) {
-                $ridTag   = "$assemblyName.$version.$rid"
-                $existRid = & git -C $WorkspaceRoot tag -l $ridTag
-                if (-not $existRid) {
-                    & git -C $WorkspaceRoot tag $ridTag
-                    Write-Host "  📌 Tag: $ridTag" -ForegroundColor Yellow
-                }
+                Write-Host "  📌 Would tag: $assemblyName.$version.$rid" -ForegroundColor Yellow
             }
         }
     }

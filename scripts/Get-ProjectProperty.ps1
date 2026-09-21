@@ -48,8 +48,9 @@ if ($Property.Count -eq 1) {
         Write-Error "Property '$($Property[0])' evaluated to an empty value on '$ProjectPath'."
         exit 1
     }
+    # Return instead of exiting, since this script is also invoked in-process (via `&`) by callers that must keep running afterwards.
     Write-Output $value
-    exit 0
+    return
 }
 
 try {

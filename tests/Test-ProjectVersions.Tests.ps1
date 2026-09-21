@@ -32,4 +32,14 @@ Describe 'Test-ProjectVersions' {
 
         Get-Content $summaryFile -Raw | Should -Match 'BadLib\.csproj'
     }
+
+    It 'fails on a version with a leading zero in a numeric component' {
+        $result = Invoke-ScriptUnderTest -Path $script:ScriptPath -Arguments @{
+            WorkspaceRoot = "$script:FixturesDir/LeadingZero"
+            ConfigPath    = "$script:FixturesDir/LeadingZero/ci-config.json"
+        }
+
+        $result.ExitCode | Should -Be 1
+        ($result.Output -join "`n") | Should -Match 'LeadingZeroLib\.csproj'
+    }
 }

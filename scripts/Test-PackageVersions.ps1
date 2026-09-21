@@ -26,7 +26,7 @@ $solutionPath = Join-Path $WorkspaceRoot $config.solutionPath
 
 Write-Host 'Checking for prerelease NuGet packages...' -ForegroundColor Cyan
 
-$jsonText = & dotnet list $solutionPath package --format json
+$jsonText = & dotnet list $solutionPath package --format json --include-transitive
 if ($LASTEXITCODE -ne 0) {
     Write-Host '❌ dotnet list package failed.' -ForegroundColor Red
     exit 1
@@ -45,7 +45,8 @@ $rows          = [System.Collections.Generic.List[string]]::new()
 
 foreach ($project in $data.projects) {
     foreach ($framework in $project.frameworks) {
-        foreach ($pkg in $framework.topLevelPackages) {
+        $packages = @($framework.topLevelPackages) + @($framework.transitivePackages)
+        foreach ($pkg in $packages) {
             $version = if ($pkg.resolvedVersion) { $pkg.resolvedVersion } else { $pkg.requestedVersion }
             if ($version -match $prereleaseTag) {
                 Write-Host "  ❌  $($pkg.id)  $version" -ForegroundColor Red

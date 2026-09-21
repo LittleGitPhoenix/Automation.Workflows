@@ -27,7 +27,7 @@ $projectsRoot = Join-Path $WorkspaceRoot ([System.IO.Path]::GetDirectoryName($co
 
 Write-Host 'Checking project versions...' -ForegroundColor Cyan
 
-$semverRegex = '^[0-9]+\.[0-9]+\.[0-9]+(-RC\.[0-9]+)?$'
+$semverRegex = '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-RC\.(0|[1-9][0-9]*))?$'
 $errors      = 0
 $rows        = [System.Collections.Generic.List[string]]::new()
 

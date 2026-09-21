@@ -135,7 +135,7 @@ Add `.github/scripts/Invoke-CI.ps1` in the consuming repo. It forwards to a loca
 param(
     [ValidateSet('Validate', 'Release', 'All')]
     [string] $Mode,
-    [switch] $CreateTags
+    [switch] $ShowTags = $true
 )
 
 $ErrorActionPreference = 'Stop'
@@ -147,9 +147,8 @@ if (-not $toolsPath -or -not (Test-Path $toolsPath)) {
 }
 
 $repoRoot = [System.IO.Path]::GetFullPath("$PSScriptRoot/../..")
-$params = @{ WorkspaceRoot = $repoRoot }
+$params = @{ WorkspaceRoot = $repoRoot; ShowTags = $ShowTags }
 if ($Mode) { $params['Mode'] = $Mode }
-if ($CreateTags) { $params['CreateTags'] = $true }
 
 & (Join-Path $toolsPath 'scripts/Invoke-CI.ps1') @params
 exit $LASTEXITCODE

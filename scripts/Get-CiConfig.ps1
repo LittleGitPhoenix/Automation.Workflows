@@ -36,7 +36,7 @@ if (-not $ConfigPath) {
     $ConfigPath = Join-Path $WorkspaceRoot '.github/ci-config.json'
 }
 
-if (-not (Test-Path $ConfigPath)) {
+if (-not (Test-Path $ConfigPath -PathType Leaf)) {
     Write-Error "ci-config.json not found at '$ConfigPath'."
     exit 1
 }
@@ -49,7 +49,7 @@ if (-not $config.solutionPath) {
 }
 
 $resolvedSolutionPath = Join-Path $WorkspaceRoot $config.solutionPath
-if (-not (Test-Path $resolvedSolutionPath)) {
+if (-not (Test-Path $resolvedSolutionPath -PathType Leaf)) {
     Write-Error "ci-config.json's 'solutionPath' does not resolve to an existing file: '$resolvedSolutionPath'."
     exit 1
 }

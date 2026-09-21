@@ -7,9 +7,12 @@ BeforeAll {
 
 Describe 'Get-ProjectVersion' {
 
-    It 'returns all relevant version properties' {
+    It 'returns all relevant defined version properties' {
         $result = & $script:ScriptPath -ProjectPath "$script:FixturesDir/ValidVersion.csproj"
 
+        # AssemblyVersion/FileVersion/InformationalVersion are only computed by build targets
+        # (e.g. GenerateAssemblyInfo), not at raw -getProperty evaluation time, so a project that
+        # only sets <Version> evaluates just PackageVersion and Version.
         @($result.PSObject.Properties.Name) | Should -Be @('PackageVersion', 'Version')
         $result.Version | Should -Be '1.2.3'
     }

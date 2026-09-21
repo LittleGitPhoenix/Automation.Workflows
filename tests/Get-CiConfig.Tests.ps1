@@ -54,6 +54,16 @@ Describe 'Get-CiConfig' {
         $result.Output   | Should -Match 'does not resolve to an existing file'
     }
 
+    It 'fails when solutionPath resolves to a directory instead of a file' {
+        $result = Invoke-ScriptUnderTest -Path $script:ScriptPath -Arguments @{
+            WorkspaceRoot = "$script:FixturesDir/valid-minimal"
+            ConfigPath    = "$script:FixturesDir/invalid/solutionpath-is-directory.json"
+        }
+
+        $result.ExitCode | Should -Be 1
+        $result.Output   | Should -Match 'does not resolve to an existing file'
+    }
+
     It 'fails on an unknown releaseTargets type' {
         $result = Invoke-ScriptUnderTest -Path $script:ScriptPath -Arguments @{
             WorkspaceRoot = "$script:FixturesDir/valid-minimal"
