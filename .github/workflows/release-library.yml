@@ -1,0 +1,133 @@
+# ╔═════════════════════════════════════════════╗
+# ║ Automation.Workflows Release Library v1.0.0 ║
+# ╚═════════════════════════════════════════════╝
+# Reusable release workflow for NuGet library repositories.
+# Runs the same validate steps, then packs/releases via Invoke-Release-Library.ps1.
+name: Reusable Release (Library)
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        type: string
+        default: '10.0.x'
+      config-path:
+        type: string
+        default: '.github/ci-config.json'
+      tools-ref:
+        type: string
+        #! Always switch to a fixed tag (e.g. 'v1') once any development is finished and the new version is to be published.
+        default: 'v1'
+        #default: 'development'
+    secrets:
+      NUGET_USER:
+        required: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+
+permissions:
+  contents: write
+  id-token: write
+  checks: write
+
+# Cancel an older, still-running release for the same repository/workflow/ref, so a superseding push on the same branch always wins. This ensures that only the latest release attempt for a given branch is executed.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  release:
+    name: Validate, build, test, and release library packages
+    runs-on: ubuntu-latest
+    # Serialize releases across different refs (queue, don't cancel) so they never race on tags/NuGet pushes. This means that releases on different branches run one after the other rather than concurrently.
+    concurrency:
+      group: ${{ github.workflow }}
+      queue: max
+    steps:
+
+      - name: <Setup> Checkout consumer repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: <Setup> Checkout Automation.Workflows scripts
+        uses: actions/checkout@v7
+        with:
+          repository: LittleGitPhoenix/Automation.Workflows
+          ref: ${{ inputs.tools-ref }}
+          path: _tools
+
+      - name: <Setup> Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: <Setup> Configure git identity
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: <Test> Check project versions
+        shell: pwsh
+        run: _tools/scripts/Test-ProjectVersions.ps1 -WorkspaceRoot "$pwd" -ConfigPath "${{ inputs.config-path }}" -SummaryFile "$Env:RUNNER_TEMP/ci-summary.md"
+
+      - name: <Test> Check for prerelease packages
+        shell: pwsh
+        run: _tools/scripts/Test-PackageVersions.ps1 -WorkspaceRoot "$pwd" -ConfigPath "${{ inputs.config-path }}" -SummaryFile "$Env:RUNNER_TEMP/ci-summary.md"
+
+      - name: <Test> Check changelog versions
+        shell: pwsh
+        run: _tools/scripts/Test-ChangelogVersions.ps1 -WorkspaceRoot "$pwd" -ConfigPath "${{ inputs.config-path }}" -SummaryFile "$Env:RUNNER_TEMP/ci-summary.md"
+
+      - name: <Build> Build solution
+        shell: pwsh
+        run: _tools/scripts/Invoke-Build.ps1 -WorkspaceRoot "$pwd" -ConfigPath "${{ inputs.config-path }}"
+
+      - name: <Test> Run tests with coverage
+        id: run-tests
+        shell: pwsh
+        run: _tools/scripts/Invoke-Tests.ps1 -WorkspaceRoot "$pwd" -ConfigPath "${{ inputs.config-path }}" -SummaryFile "$Env:RUNNER_TEMP/ci-summary.md"
+
+      - name: <Summary> Write step summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/ci-summary.md" ]; then
+            cat "$RUNNER_TEMP/ci-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: <Test> Publish test results
+        uses: dorny/test-reporter@v3
+        if: always()
+        with:
+          name: Unit Tests
+          path: '**/TestResults/*.test.result.xml'
+          reporter: dotnet-nunit
+          fail-on-empty: 'false'
+          fail-on-error: 'false'
+
+      - name: <Setup> NuGet login (OIDC)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: <Release> Create library releases
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: _tools/scripts/Invoke-Release-Library.ps1 -WorkspaceRoot "$pwd" -ConfigPath "${{ inputs.config-path }}" -SummaryFile "$Env:RUNNER_TEMP/release-summary.md"
+
+      - name: <Summary> Write release summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/release-summary.md" ]; then
+            cat "$RUNNER_TEMP/release-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi

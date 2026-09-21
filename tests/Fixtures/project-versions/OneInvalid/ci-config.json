@@ -1,0 +1,4 @@
+{
+  "solutionPath": "src/Fake.slnx",
+  "coverageScope": "[Fake.*]*"
+}

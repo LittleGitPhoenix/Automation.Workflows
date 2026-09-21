@@ -1,0 +1,25 @@
+# Changelog
+
+All notable changes to **Invoke-CI.ps1** will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+___
+
+## 1.0.0
+
+📅 _2026-09-21_
+✏️ _Leistner_
+
+Initial release.
+
+### References
+
+⚪ Get-CiConfig.ps1 1.0.0
+⚪ Test-ProjectVersions.ps1 1.0.0
+⚪ Test-PackageVersions.ps1 1.0.0
+⚪ Test-ChangelogVersions.ps1 1.0.0
+⚪ Invoke-Build.ps1 1.0.0
+⚪ Invoke-Tests.ps1 1.0.0
+⚪ Invoke-Release-Library.ps1 1.0.0
+⚪ Invoke-Release-Executable.ps1 1.0.0

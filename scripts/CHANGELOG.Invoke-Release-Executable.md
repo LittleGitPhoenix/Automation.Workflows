@@ -1,0 +1,23 @@
+# Changelog
+
+All notable changes to **Invoke-Release-Executable.ps1** will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+___
+
+## 1.0.0
+
+📅 _2026-09-21_
+✏️ _Leistner_
+
+Initial release.
+
+### References
+
+⚪ Get-CiConfig.ps1 1.0.0
+⚪ Get-ProjectAssemblyName.ps1 1.0.0
+⚪ Get-ProjectVersion.ps1 1.0.0
+⚪ Get-ChangelogEntry.ps1 1.0.0
+⚪ Write-Section.ps1 1.0.0
+⚪ Invoke-Publish.ps1 1.0.0
