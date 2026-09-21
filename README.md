@@ -103,6 +103,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  checks: write
 
 jobs:
   release:
@@ -119,11 +120,11 @@ jobs:
 
 	> [!NOTE]
 	>
-	> Once a job or workflow declares its own `permissions:` block, every scope not listed is implicitly set to `none` rather than falling back to the repo default, so `contents: write` must be listed alongside it too or the release step's git tag push and `gh release create` calls will fail.
+	> Once a job or workflow declares its own `permissions:` block, every scope not listed is implicitly set to `none` rather than falling back to the repo default, so `contents: write` and `checks: write` must be listed alongside it too, or the release step's git tag push/`gh release create` calls and the test-reporter check run creation will fail.
 
 - A `NUGET_USER` secret in the consumer repo holding the nuget.org username.
 
-For an executable repo, use `release-executable.yml` instead (no NuGet publishing at all; it uses the automatically provided `GITHUB_TOKEN`).
+For an executable repo, use `release-executable.yml` instead (no NuGet publishing at all; it uses the automatically provided `GITHUB_TOKEN`). Its caller workflow needs `permissions: contents: write` and `checks: write` for the same reasons.
 
 ### 3. Add a local CI wrapper (optional, but recommended)
 
