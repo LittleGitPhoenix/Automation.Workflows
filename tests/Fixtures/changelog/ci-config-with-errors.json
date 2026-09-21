@@ -1,0 +1,14 @@
+{
+  "solutionPath": "src/Dummy.slnx",
+  "coverageScope": "[Dummy.*]*",
+  "releaseTargets": [
+    {
+      "type": "library",
+      "projects": [
+        "MissingChangelog/MissingChangelog.csproj",
+        "NoMatchingEntry/NoMatchingEntry.csproj",
+        "WithPlaceholderDate/WithPlaceholderDate.csproj"
+      ]
+    }
+  ]
+}

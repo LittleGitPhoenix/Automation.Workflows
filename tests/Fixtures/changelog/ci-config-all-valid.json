@@ -1,0 +1,13 @@
+{
+  "solutionPath": "src/Dummy.slnx",
+  "coverageScope": "[Dummy.*]*",
+  "releaseTargets": [
+    {
+      "type": "library",
+      "projects": [
+        "WithValidEntry/WithValidEntry.csproj",
+        "NoDateLine/NoDateLine.csproj"
+      ]
+    }
+  ]
+}

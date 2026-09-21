@@ -1,0 +1,7 @@
+{
+  "solutionPath": "src/Dummy.slnx",
+  "coverageScope": "[Dummy.*]*",
+  "releaseTargets": [
+    { "type": "nuget", "discover": true }
+  ]
+}

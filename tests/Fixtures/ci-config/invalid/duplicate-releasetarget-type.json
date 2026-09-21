@@ -1,0 +1,8 @@
+{
+  "solutionPath": "src/Dummy.slnx",
+  "coverageScope": "[Dummy.*]*",
+  "releaseTargets": [
+    { "type": "library", "discover": true },
+    { "type": "library", "projects": [ "src/Foo/Foo.csproj" ] }
+  ]
+}

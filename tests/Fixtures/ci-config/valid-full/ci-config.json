@@ -1,0 +1,10 @@
+{
+  "solutionPath": "src/Dummy.slnx",
+  "coverageScope": "[Dummy.*]*",
+  "coverageExclude": "[*.Test]*",
+  "nugetDir": ".custom-nuget",
+  "releaseTargets": [
+    { "type": "library", "discover": true },
+    { "type": "executable", "projects": [ "src/Foo/Foo.csproj" ], "publishProfilesDir": "Properties/PublishProfiles" }
+  ]
+}
