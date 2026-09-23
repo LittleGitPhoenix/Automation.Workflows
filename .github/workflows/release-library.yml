@@ -49,9 +49,6 @@ jobs:
   release:
     name: Validate, build, test, and release library packages
     runs-on: ${{ inputs.environment }}
-    env:
-      NUGET_USER: ${{ secrets.NUGET_USER }}
-      NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
     # Serialize releases across different refs (queue, don't cancel) so they never race on tags/NuGet pushes. This means that releases on different branches run one after the other rather than concurrently.
     concurrency:
       group: ${{ github.workflow }}
@@ -59,8 +56,14 @@ jobs:
     steps:
 
       - name: <Validate> Validate NuGet credentials
+        id: validate-nuget
         shell: pwsh
+        env:
+          NUGET_USER: ${{ secrets.NUGET_USER }}
+          NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
         run: |
+          $useOidc = [string]::IsNullOrWhiteSpace($Env:NUGET_TOKEN) -and -not [string]::IsNullOrWhiteSpace($Env:NUGET_USER)
+          "use_oidc=$($useOidc.ToString().ToLowerInvariant())" >> $Env:GITHUB_OUTPUT
           if ([string]::IsNullOrWhiteSpace($Env:NUGET_TOKEN) -and [string]::IsNullOrWhiteSpace($Env:NUGET_USER)) {
             Write-Host '❌ Neither the NUGET_TOKEN nor the NUGET_USER secret is set. At least one is required to publish to NuGet.org.' -ForegroundColor Red
             exit 1
@@ -133,7 +136,7 @@ jobs:
         id: nuget-login
         #! NUGET_TOKEN takes precedence, so the OIDC exchange is skipped once a token secret is available.
         #! OIDC authentication is currently not working if invoked by a reusable workflow: https://github.com/NuGet/login/issues/9
-        if: ${{ !env.NUGET_TOKEN && env.NUGET_USER }}
+        if: ${{ steps.validate-nuget.outputs.use_oidc == 'true' }}
         uses: NuGet/login@v1
         with:
           user: ${{ secrets.NUGET_USER }}
