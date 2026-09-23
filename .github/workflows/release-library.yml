@@ -1,5 +1,5 @@
 # ╔═════════════════════════════════════════════╗
-# ║ Automation.Workflows Release Library v1.0.0 ║
+# ║ Automation.Workflows Release Library v1.1.0 ║
 # ╚═════════════════════════════════════════════╝
 # Reusable release workflow for NuGet library repositories.
 # Runs the same validate steps, then packs/releases via Invoke-Release-Library.ps1.
@@ -8,6 +8,11 @@ name: Reusable Release (Library)
 on:
   workflow_call:
     inputs:
+      environment:
+        description: 'The runner (operating system) that will process the jobs. See: https://docs.github.com/en/actions/using-jobs/choosing-the-runner-for-a-job#choosing-github-hosted-runners.'
+        default: 'ubuntu-latest'
+        required: false
+        type: string
       dotnet-version:
         type: string
         default: '10.0.x'
@@ -21,7 +26,9 @@ on:
         #default: 'development'
     secrets:
       NUGET_USER:
-        required: true
+        required: false
+      NUGET_TOKEN:
+        required: false
 
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
@@ -41,12 +48,26 @@ jobs:
 
   release:
     name: Validate, build, test, and release library packages
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.environment }}
     # Serialize releases across different refs (queue, don't cancel) so they never race on tags/NuGet pushes. This means that releases on different branches run one after the other rather than concurrently.
     concurrency:
       group: ${{ github.workflow }}
       queue: max
     steps:
+
+      - name: <Validate> Validate NuGet credentials
+        id: validate-nuget
+        shell: pwsh
+        env:
+          NUGET_USER: ${{ secrets.NUGET_USER }}
+          NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
+        run: |
+          $useOidc = [string]::IsNullOrWhiteSpace($Env:NUGET_TOKEN) -and -not [string]::IsNullOrWhiteSpace($Env:NUGET_USER)
+          "use_oidc=$($useOidc.ToString().ToLowerInvariant())" >> $Env:GITHUB_OUTPUT
+          if ([string]::IsNullOrWhiteSpace($Env:NUGET_TOKEN) -and [string]::IsNullOrWhiteSpace($Env:NUGET_USER)) {
+            Write-Host '❌ Neither the NUGET_TOKEN nor the NUGET_USER secret is set. At least one is required to publish to NuGet.org.' -ForegroundColor Red
+            exit 1
+          }
 
       - name: <Setup> Checkout consumer repository
         uses: actions/checkout@v7
@@ -113,6 +134,9 @@ jobs:
 
       - name: <Setup> NuGet login (OIDC)
         id: nuget-login
+        #! NUGET_TOKEN takes precedence, so the OIDC exchange is skipped once a token secret is available.
+        #! OIDC authentication is currently not working if invoked by a reusable workflow: https://github.com/NuGet/login/issues/9
+        if: ${{ steps.validate-nuget.outputs.use_oidc == 'true' }}
         uses: NuGet/login@v1
         with:
           user: ${{ secrets.NUGET_USER }}
@@ -121,7 +145,7 @@ jobs:
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.validate-nuget.outputs.use_oidc == 'true' && steps.nuget-login.outputs.NUGET_API_KEY || secrets.NUGET_TOKEN }}
         run: _tools/scripts/Invoke-Release-Library.ps1 -WorkspaceRoot "$pwd" -ConfigPath "${{ inputs.config-path }}" -SummaryFile "$Env:RUNNER_TEMP/release-summary.md"
 
       - name: <Summary> Write release summary

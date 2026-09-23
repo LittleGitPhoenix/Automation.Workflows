@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ___
 
+## 1.1.0
+
+📅 _2026-09-23_
+✏️ _Leistner_
+
+### Added
+
+- Added a new optional `environment` input that lets consumers configure the runner (operating system) used by the job. Defaults to `ubuntu-latest` as before.
+- Added `NUGET_TOKEN` as an optional alternative to `NUGET_USER` for publishing to NuGet.org. This is necessary since NuGet's OIDC trusted publishing currently doesn't support reusable workflows (see [NuGet/login#9](https://github.com/NuGet/login/issues/9)). Both secrets are now optional, but at least one must be set or the new validation step fails fast. `NUGET_TOKEN` takes precedence over the OIDC login performed via `NUGET_USER` when both are present.
+___
+
 ## 1.0.0
 
 📅 _2026-09-21_

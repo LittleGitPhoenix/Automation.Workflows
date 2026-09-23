@@ -108,11 +108,16 @@ permissions:
 jobs:
   release:
     uses: LittleGitPhoenix/Automation.Workflows/.github/workflows/release-library.yml@v1
+    with:
+      environment: ubuntu-latest
     secrets:
       NUGET_USER: ${{ secrets.NUGET_USER }}
+      NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
 ```
 
-`release-library.yml` publishes to NuGet.org via [Trusted Publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing) (OIDC), not a long-lived API key. This requires:
+`release-library.yml` publishes to NuGet.org either via [Trusted Publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing) (OIDC) with `NUGET_USER`, or via a NuGet API key with `NUGET_TOKEN`. OIDC is currently unavailable for reusable workflows, so the API-key path is the workaround when needed. This requires:
+
+- The optional `environment` input selects the runner operating system and defaults to `ubuntu-latest`.
 
 - A Trusted Publishing policy registered on nuget.org for the package owner, with Repository Owner/Repository matching the *consumer* repo and Workflow File set to the consumer's own workflow filename (e.g. `release.yml`) - not the reusable workflow's path in this repository.
 
@@ -122,7 +127,7 @@ jobs:
 	>
 	> Once a job or workflow declares its own `permissions:` block, every scope not listed is implicitly set to `none` rather than falling back to the repo default, so `contents: write` and `checks: write` must be listed alongside it too, or the release step's git tag push/`gh release create` calls and the test-reporter check run creation will fail.
 
-- A `NUGET_USER` secret in the consumer repo holding the nuget.org username.
+- Either a `NUGET_USER` secret in the consumer repo holding the nuget.org username for OIDC, or a `NUGET_TOKEN` secret holding a NuGet API key. When both are supplied, `NUGET_TOKEN` takes precedence and the OIDC login is skipped.
 
 For an executable repo, use `release-executable.yml` instead (no NuGet publishing at all; it uses the automatically provided `GITHUB_TOKEN`). Its caller workflow needs `permissions: contents: write` and `checks: write` for the same reasons.
 

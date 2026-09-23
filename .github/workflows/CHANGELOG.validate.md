@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ___
 
+## 1.1.0
+
+📅 _2026-09-23_
+✏️ _Leistner_
+
+### Added
+
+- Added a new optional `environment` input that lets consumers configure the runner (operating system) used by the job. Defaults to `ubuntu-latest` as before.
+___
+
 ## 1.0.0
 
 📅 _2026-09-21_

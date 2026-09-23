@@ -1,5 +1,5 @@
 # ╔══════════════════════════════════════╗
-# ║ Automation.Workflows Validate v1.0.0 ║
+# ║ Automation.Workflows Validate v1.1.0 ║
 # ╚══════════════════════════════════════╝
 # Reusable validation workflow. Callers provide the consumer repo's own checkout;
 # this workflow additionally checks out Automation.Workflows itself (public, no token needed)
@@ -9,6 +9,11 @@ name: Reusable Validate
 on:
   workflow_call:
     inputs:
+      environment:
+        description: 'The runner (operating system) that will process the jobs. See: https://docs.github.com/en/actions/using-jobs/choosing-the-runner-for-a-job#choosing-github-hosted-runners.'
+        default: 'ubuntu-latest'
+        required: false
+        type: string
       dotnet-version:
         type: string
         default: '10.0.x'
@@ -40,7 +45,7 @@ jobs:
 
   validate:
     name: Validate repository
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.environment }}
     steps:
 
       - name: <Setup> Checkout consumer repository
