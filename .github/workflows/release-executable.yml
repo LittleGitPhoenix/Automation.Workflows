@@ -1,5 +1,5 @@
 # ╔════════════════════════════════════════════════╗
-# ║ Automation.Workflows Release Executable v1.0.0 ║
+# ║ Automation.Workflows Release Executable v1.1.0 ║
 # ╚════════════════════════════════════════════════╝
 # Reusable release workflow for self-contained executable repositories.
 # Runs the same validate steps, then publishes/releases via Invoke-Release-Executable.ps1.
@@ -8,6 +8,11 @@ name: Reusable Release (Executable)
 on:
   workflow_call:
     inputs:
+      environment:
+        description: 'The runner (operation system) that will process the jobs. See: https://docs.github.com/en/actions/using-jobs/choosing-the-runner-for-a-job#choosing-github-hosted-runners.'
+        default: 'ubuntu-latest'
+        required: false
+        type: string
       dotnet-version:
         type: string
         default: '10.0.x'
@@ -37,7 +42,7 @@ jobs:
 
   release:
     name: Validate, build, test, and release executables
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.environment }}
     # Serialize releases across different refs (queue, don't cancel) so they never race on tags/NuGet pushes. This means that releases on different branches run one after the other rather than concurrently.
     concurrency:
       group: ${{ github.workflow }}
