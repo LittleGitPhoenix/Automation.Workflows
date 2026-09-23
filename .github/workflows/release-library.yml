@@ -9,7 +9,7 @@ on:
   workflow_call:
     inputs:
       environment:
-        description: 'The runner (operation system) that will process the jobs. See: https://docs.github.com/en/actions/using-jobs/choosing-the-runner-for-a-job#choosing-github-hosted-runners.'
+        description: 'The runner (operating system) that will process the jobs. See: https://docs.github.com/en/actions/using-jobs/choosing-the-runner-for-a-job#choosing-github-hosted-runners.'
         default: 'ubuntu-latest'
         required: false
         type: string
@@ -132,7 +132,7 @@ jobs:
       - name: <Setup> NuGet login (OIDC)
         id: nuget-login
         #! NUGET_TOKEN takes precedence, so the OIDC exchange is skipped once a token secret is available.
-		#! OICD authentication is currently not working if invoked by a reusable workflow: https://github.com/NuGet/login/issues/9
+        #! OIDC authentication is currently not working if invoked by a reusable workflow: https://github.com/NuGet/login/issues/9
         if: ${{ !secrets.NUGET_TOKEN && secrets.NUGET_USER }}
         uses: NuGet/login@v1
         with:

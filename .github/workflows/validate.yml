@@ -10,7 +10,7 @@ on:
   workflow_call:
     inputs:
       environment:
-        description: 'The runner (operation system) that will process the jobs. See: https://docs.github.com/en/actions/using-jobs/choosing-the-runner-for-a-job#choosing-github-hosted-runners.'
+        description: 'The runner (operating system) that will process the jobs. See: https://docs.github.com/en/actions/using-jobs/choosing-the-runner-for-a-job#choosing-github-hosted-runners.'
         default: 'ubuntu-latest'
         required: false
         type: string
