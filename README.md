@@ -115,7 +115,7 @@ jobs:
       NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
 ```
 
-`release-library.yml` publishes to NuGet.org via [Trusted Publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing) (OIDC), not a long-lived API key. This requires:
+`release-library.yml` publishes to NuGet.org either via [Trusted Publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing) (OIDC) with `NUGET_USER`, or via a NuGet API key with `NUGET_TOKEN`. OIDC is currently unavailable for reusable workflows, so the API-key path is the workaround when needed. This requires:
 
 - The optional `environment` input selects the runner operating system and defaults to `ubuntu-latest`.
 
